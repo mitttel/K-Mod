@@ -1,0 +1,493 @@
+#include <SFML/Graphics.hpp>
+#include <iostream>
+#include <vector>
+#include <cmath>
+#include <ctime>
+#include <cstdlib>
+#include <algorithm>
+#include <limits>
+#include <climits>
+#include <experimental/random>
+#include <functional>
+#include <set>
+
+using namespace std;
+
+unsigned int width = 1000;
+unsigned int height = 1000;
+unsigned int MinWidth = 600;
+unsigned int MinHeight = 400;
+unsigned int frame = static_cast<int>(static_cast<float>(height) * 0.1f);
+float radius = 5.f;
+
+sf::RenderWindow window(sf::VideoMode({width, height}), "Lab 2");
+sf::RenderWindow Chart(sf::VideoMode({MinWidth, MinHeight}), "Chart");
+
+vector<vector<int>> GenerateGraph(const int n) {
+    vector<vector<int>> graph(n, vector<int>(2, 0));
+    int temp = 0;
+    for (int i = 0; i < width; i+= (width / n)) {
+        if (temp >= n) break;
+
+        int r = max(static_cast<int>(frame), i);
+        int l = min(static_cast<int>(i + width / n), static_cast<int>(width - frame));
+        int R = static_cast<int>(frame);
+        int L = static_cast<int>(height - frame);
+
+        graph[temp][0] = experimental::randint(min(l, r), max(l, r));
+        graph[temp][1] = experimental::randint(min(L, R), max(L, R));
+
+        ++temp;
+    }
+    return graph;
+}
+vector<vector<int>> CreateMatrix(const vector<vector<int>>& graph) {
+    const int n = static_cast<int>(graph.size());
+    vector<vector<int>> matrix(n, vector<int>(n, 0));
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            matrix[i][j] = matrix[j][i] = static_cast<int>(sqrt(static_cast<float>(pow(graph[i][0] - graph[j][0], 2) + pow(graph[i][1] - graph[j][1], 2))));
+        }
+    }
+    for (int i = 0; i < n; i++) {
+        matrix[i][i] = INT_MAX;
+    }
+    return matrix;
+}
+void DrawGraph(const vector<vector<int>>& graph, const vector<int>& path) {
+    sf::CircleShape node(radius);
+    node.setFillColor(sf::Color::White);
+
+    for(int i = 1; i < path.size(); i++) {
+        const sf::Vertex line[] = {
+            sf::Vertex{sf::Vector2f(static_cast<float>(graph[path[i - 1]][0]), static_cast<float>(graph[path[i - 1]][1])), sf::Color::Green},
+            sf::Vertex{sf::Vector2f(static_cast<float>(graph[path[i]][0]), static_cast<float>(graph[path[i]][1])), sf::Color::Green}
+        };
+        window.draw(line, 2, sf::PrimitiveType::Lines);
+    }
+    for (int i = 0; i < graph.size(); ++i) {
+        node.setOrigin({static_cast<float>(graph[path[i]][0]) * -1.f + radius, static_cast<float>(graph[path[i]][1]) * -1.f + radius});
+        window.draw(node);
+    }
+}
+void DrawChart(const vector<int>& ListNumber, const vector<float>& ListValue) {
+
+    const int MaxNumber = ListNumber[ListNumber.size() - 1];
+    const float MaxValue = ListValue[ListValue.size() - 1];
+
+    const float ChartFrame = static_cast<float>(frame) * static_cast<float>(MinWidth) / static_cast<float>(width);
+    const float WindowWidth = static_cast<float>(MinWidth) - 2 * ChartFrame;
+    const float WindowHeigth = static_cast<float>(MinHeight) - 2 * ChartFrame;
+
+    const float IndexWidth = WindowWidth / static_cast<float>(MaxNumber);
+    const float IndexHeight = WindowHeigth / MaxValue * 0.5f;
+
+    Chart.clear(sf::Color::Black);
+    const float DoteSize = IndexWidth * 0.1f;
+    sf::CircleShape node(DoteSize);
+    node.setFillColor(sf::Color::White);
+    for (int i = 0; i < MaxNumber; ++i) {
+        node.setOrigin({(ChartFrame + IndexWidth * static_cast<float>(i) - DoteSize) * -1.f ,  (WindowHeigth + ChartFrame - DoteSize) * -1.f});
+        Chart.draw(node);
+    }
+    for(int i = 1; i < ListNumber.size(); i++) {
+        const sf::Vertex line[] = {
+            sf::Vertex{sf::Vector2f(static_cast<float>(ListNumber[i]) * IndexWidth, WindowHeigth - ListValue[i] * IndexHeight + ChartFrame*0.9f), sf::Color::Green},
+            sf::Vertex{sf::Vector2f(static_cast<float>(ListNumber[i - 1]) * IndexWidth, WindowHeigth - ListValue[i - 1] * IndexHeight + ChartFrame*0.9f), sf::Color::Green}
+        };
+        Chart.draw(line, 2, sf::PrimitiveType::Lines);
+    }
+    sf::Vertex line[] = {
+        sf::Vertex{sf::Vector2f(ChartFrame, ChartFrame), sf::Color::White},
+        sf::Vertex{sf::Vector2f(ChartFrame, WindowHeigth + ChartFrame), sf::Color::White}
+    };
+    Chart.draw(line, 2, sf::PrimitiveType::Lines);
+    line[0] = sf::Vertex{sf::Vector2f(ChartFrame, WindowHeigth + ChartFrame), sf::Color::White};
+    line[1] = sf::Vertex{sf::Vector2f(static_cast<float>(MinWidth), WindowHeigth + ChartFrame), sf::Color::White};
+    Chart.draw(line, 2, sf::PrimitiveType::Lines);
+
+    Chart.display();
+
+}
+void PrintMatrix(const vector<vector<int>>& matrix) {
+    cout << "======================" << endl;
+    for(int i = 0; i < matrix.size(); i++) {for(int j = 0; j < matrix.size(); j++) {cout << matrix[i][j] << " ";}cout << endl;}
+    cout << "======================" << endl;
+}
+
+vector<int> BruteForce(const vector<vector<int>>& matrix, const int n) {
+    int minCost = numeric_limits<int>::max();
+    vector<int> bestPath;
+
+    vector<int> cities;
+    for (int i = 0; i < n; ++i) {
+        cities.push_back(i);
+    }
+
+    do {
+        int cost = 0;
+        for (int i = 0; i < n - 1; ++i) {
+            cost += matrix[cities[i]][cities[i + 1]];
+        }
+        cost += matrix[cities[n - 1]][cities[0]];
+
+        if (cost < minCost) {
+            minCost = cost;
+            bestPath = cities;
+        }
+    } while (next_permutation(cities.begin(), cities.end()));
+
+    return bestPath;
+}
+void SolveBruteForce(const int begin, const int end) {
+    vector<int> ListNumber;
+    vector<float> ListValue;
+    for(int n = begin; n < end; n++) {
+        auto start = std::chrono::steady_clock::now();
+        vector<vector<int>> graph = GenerateGraph(n);
+        vector<vector<int>> matrix = CreateMatrix(graph);
+        vector<int> path = BruteForce(matrix, n);
+
+        const float TimeInterval = static_cast<float>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count()) / 1000;
+        cout << n << " " << TimeInterval << "ms" << endl;
+
+        ListNumber.push_back(n);
+        ListValue.push_back(TimeInterval);
+        path.push_back(path[0]);
+
+        DrawGraph(graph, path);
+        window.display();
+        window.clear(sf::Color::Black);
+        sf::sleep(sf::milliseconds(100));
+    }
+    DrawChart(ListNumber, ListValue);
+}
+
+void combinationsMaxi(int set, const int at, const int r, const int n, std::set<int>& subsets) {
+    if (r == 0) {
+        subsets.insert(set);
+    }
+    else {
+        for(int i = at; i < n; i++) {
+            set = set | (1 << i);
+            combinationsMaxi(set, i + 1, r - 1, n, subsets);
+            set = set & ~(1 << i);
+        }
+    }
+}
+set<int> combinations(const int r, const int n) {
+    set<int> subsets;
+    combinationsMaxi(0, 0, r, n, subsets);
+    return subsets;
+}
+void setup(const vector<vector<int>>& matrix, vector<vector<int>>& memory, const int S, const int n) {
+    for(int i = 0; i < n; i++) {
+        if (i == S) continue;
+        memory[i][1<<S | 1 << i] = matrix[S][i];
+    }
+}
+bool notIn(const int i, const int subset) {
+    return ((1 << i) & subset) == 0;
+}
+void solve(const vector<vector<int>>& matrix, vector<vector<int>>& memory, const int S, const int n) {
+
+    for(int r = 3; r <= n; r++) {
+        set<int> ComBin = combinations(r, n);
+
+        for(const int subset : ComBin) {
+            if(notIn(S, subset)) continue;
+
+            for(int next = 0; next < n; next++) {
+                if(next == S || notIn(next, subset)) continue;
+                const int state = subset ^ (1 << next);
+                int minDist = INT_MAX;
+
+                for(int e = 0; e < n; e++) {
+                    if(e == S || e == next || notIn(e, subset)) continue;
+                    if(const int newDist = memory[e][state] + matrix[e][next]; newDist < minDist) minDist = newDist;
+                    memory[next][subset] = minDist;
+                }
+            }
+        }
+    }
+}
+int findMinCost(const vector<vector<int>>& matrix, const vector<vector<int>>& memory, const int S, const int n) {
+    const int END_STATE = (1 << n) - 1;
+    int minPathCost = INT_MAX;
+
+    for(int e = 0; e < n; e++) {
+        if(e == S) continue;
+        if (const int PathCost = memory[e][END_STATE] + matrix[e][S]; PathCost < minPathCost) minPathCost = PathCost;
+    }
+    return minPathCost;
+}
+vector<int> findPath(const vector<vector<int>>& matrix, const vector<vector<int>>& memory, int S, int n) {
+    int lastIndex = S;
+    int state = (1 << n) - 1;
+    vector<int> path(n + 1, 0);
+
+    for(int i = n - 1; i >= 1; i--) {
+        int index = -1;
+
+        for(int j = 0; j < n; j++) {
+            if(j == S || notIn(j, state)) continue;
+            if(index == -1) index = j;
+
+            const int prevDist = memory[index][state] + matrix[index][lastIndex];
+
+            if(const int newDist = memory[j][state] + matrix[j][lastIndex]; newDist < prevDist) index = j;
+        }
+        path[i] = index;
+        state = state ^ (1 << index);
+        lastIndex = index;
+    }
+    path[0] = path[n] = S;
+    return path;
+}
+vector<int> TSP(const vector<vector<int>>& matrix, const int n) {
+    vector<vector<int>> memory(n, vector<int>(static_cast<int>(pow(2, n)), 0));
+    setup(matrix, memory, 0, n);
+    solve(matrix, memory, 0, n);
+    const int MinCost = findMinCost(matrix, memory, 0, n);
+    vector<int> path = findPath(matrix, memory, 0, n);
+    return path;
+}
+void SolveTSP(const int begin, const int end) {
+    vector<int> ListNumber;
+    vector<float> ListValue;
+    for(int n = begin; n < end; n++) {
+        auto start = std::chrono::steady_clock::now();
+        vector<vector<int>> graph = GenerateGraph(n);
+        vector<vector<int>> matrix = CreateMatrix(graph);
+
+        vector<int> path = TSP(matrix, n);
+
+        const float TimeInterval = static_cast<float>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count()) / 1000;
+        cout << n << " | " << TimeInterval << "ms" << endl;
+
+        ListNumber.push_back(n);
+        ListValue.push_back(TimeInterval);
+
+        DrawGraph(graph, path);
+        DrawChart(ListNumber, ListValue);
+        window.display();
+        window.clear(sf::Color::Black);
+        sf::sleep(sf::milliseconds(100));
+    }
+}
+
+int FindMark(const vector<vector<int>>& matrix, const int x, const int y) {
+    int MinX = INT_MAX, MinY = INT_MAX;
+    for(int i = 0; i < matrix.size(); i++) {
+        if(i != x) {
+            MinX = min(MinX, matrix[i][y]);
+        }
+    }
+    for(int j = 0; j < matrix.size(); j++) {
+        if(j != y) {
+            MinY = min(MinY, matrix[x][j]);
+        }
+    }
+    return MinX + MinY;
+}
+
+void DeleteEdge(vector<vector<int>>& matrix, const int x, const int y) {
+    for(auto &e : matrix) {
+        e.erase(e.begin() + y);
+    }
+    matrix.erase(matrix.begin() + x);
+}
+
+vector<pair<int, int>> SolveTree(vector<vector<int>>& matrix, vector<pair<int, int>> path, const int n, vector<int>& Ox, vector<int>& Oy) {
+
+    int MinCost = 0;
+    vector<pair<int, int>> ListNull;
+    for(int i = 0; i < n; i++) {
+        const int MinDistX = *min_element(matrix[i].begin(), matrix[i].end());
+        MinCost += MinDistX;
+        for(int j = 0; j < n; j++) {
+            matrix[i][j] -= MinDistX;
+        }
+    }
+    for (int j = 0; j < n; j++) {
+        int MinDistY = INT_MAX;
+        for(int i = 0; i < n; i++) {
+            if(matrix[i][j] < MinDistY) MinDistY = matrix[i][j];
+        }
+        for(int i = 0; i < n; i++) {
+            matrix[i][j] -= MinDistY;
+            if(matrix[i][j] == 0) ListNull.emplace_back(i, j);
+        }
+        MinCost += MinDistY;
+    }
+
+    int MaxPriority = 0;
+    pair<int, int> MaxNull = {-1, -1};
+    for(auto [fst, snd] : ListNull) {
+        int TempPriority = FindMark(matrix, fst, snd);
+        if(TempPriority >= MaxPriority) {
+            MaxPriority = TempPriority;
+            MaxNull = {fst, snd};
+        }
+    }
+
+    //PrintMatrix(matrix);
+    //cout << ListNull.size() << endl;
+
+    if(MaxNull.first == -1 || MaxNull.second == -1) {
+        if(ListNull.size() == 1) {
+            path.emplace_back(0, 0);
+            return path;
+        }
+        else {
+            path.emplace_back(0, 1);
+            path.emplace_back(1, 0);
+            return path;
+        }
+    }
+
+    int FindX = -1, FindY = -1;
+    for(int i = 0; i < Ox.size(); i++) {
+        if(Ox[MaxNull.first] == Oy[i]) {
+            FindY = i;
+            break;
+        }
+    }
+    for(int i = 0; i < Ox.size(); i++) {
+        if(Oy[MaxNull.second] == Ox[i]) {
+            FindX = i;
+            break;
+        }
+    }
+    if(FindX != -1 && FindY != -1) matrix[FindX][FindY] = INT_MAX;
+
+    Ox.erase(Ox.begin() + MaxNull.first);
+    Oy.erase(Oy.begin() + MaxNull.second);
+
+    DeleteEdge(matrix, MaxNull.first, MaxNull.second);
+    path.emplace_back(MaxNull.first, MaxNull.second);
+    return SolveTree(matrix, path, n - 1, Ox, Oy);
+
+}
+vector<int> CalculatePath(const vector<pair<int, int>>& path) {
+    const int n = static_cast<int>(path.size());
+    vector<int> TruePathX(n, 0);
+    vector<int> TruePathY(n, 0);
+    vector<int> SavePath(n, 0);
+    vector<int> PathX(n, 0);
+    vector<int> EndPath(n + 1, 0);
+    PathX[path[0].first] = 1;
+    vector<int> PathY(n, 0);
+    PathY[path[0].second] = 1;
+
+    for(int h = 1; h < n; h++) {
+        int FindCountX = 0;
+        for(int i = 0; i < n; i++) {
+            if(PathX[i] == 0) {
+                if(FindCountX == path[h].first) {
+                    TruePathX[h] = i;
+                    PathX[i] = 1;
+                    break;
+                }
+                FindCountX++;
+            }
+        }
+        int FindCountY = 0;
+        for(int i = 0; i < n; i++) {
+            if(PathY[i] == 0) {
+                if(FindCountY == path[h].second) {
+                    TruePathY[h] = i;
+                    PathY[i] = 1;
+                    break;
+                }
+                FindCountY++;
+            }
+        }
+    }
+    TruePathX[0] = path[0].first; TruePathY[0] = path[0].second;
+    for(int i = 0; i < n; i++) {SavePath[TruePathX[i]] = TruePathY[i];}\
+
+    int i = 0; int index = 0;
+    while(i < n + 1) {
+        EndPath[i] = index;
+        index = SavePath[index];
+        i++;
+    }
+    return EndPath;
+}
+
+void SolveE(const int begin, const int end) {
+    vector<int> ListNumber;
+    vector<float> ListValue;
+    for(int n = begin; n < end; n++) {
+        auto start = std::chrono::steady_clock::now();
+        vector<vector<int>> graph = GenerateGraph(n);
+        vector<vector<int>> matrix = CreateMatrix(graph);
+
+
+        const float TimeInterval = static_cast<float>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count()) / 1000;
+        cout << n << " | " << TimeInterval << "ms" << endl;
+
+        ListNumber.push_back(n);
+        ListValue.push_back(TimeInterval);
+
+
+        //===
+        vector<int> Ox(n); vector<int> Oy(n);
+        for(int i = 0; i < n; i++) {Ox[i] = i; Oy[i] = i;}
+        auto RawPath = SolveTree(matrix, {},  n, Ox, Oy);
+        auto path = CalculatePath(RawPath);
+        //for(auto &e: path) cout << e << " ";
+        //cout << endl;
+
+        //===
+
+        DrawGraph(graph, path);
+        DrawChart(ListNumber, ListValue);
+        window.display();
+        window.clear(sf::Color::Black);
+        sf::sleep(sf::milliseconds(100));
+    }
+}
+
+int main() {
+    window.setPosition(sf::Vector2i(0, 0));
+    Chart.setPosition(sf::Vector2i(static_cast<int>(width), 0));
+
+    while (window.isOpen())
+    {
+        while (const std::optional event = window.pollEvent())
+        {
+            if (event->is<sf::Event::Closed>()) {
+                window.close();
+                Chart.close();
+            }
+        }
+        while (const std::optional event = Chart.pollEvent())
+        {
+            if (event->is<sf::Event::Closed>())
+                Chart.close();
+        }
+
+
+        vector<vector<int>> matrix(6, vector<int>(6, 0));
+        matrix = {
+            {INT_MAX, 41, 40, 48, 40, 42},
+            {48, INT_MAX, 41, 49, 42, 46},
+            {22, 22, INT_MAX, 23, 24, 19},
+            {15, 17, 11, INT_MAX, 10, 14},
+            {47, 43, 18, 42, INT_MAX, 52},
+            {34, 39, 30, 39, 32, INT_MAX}
+        };
+        // auto RawPath = SolveTree(matrix, {},  6);
+        // auto path = CalculatePath(RawPath);
+        // for(auto &e: path) cout << e << " ";
+        // cout << endl;
+
+        //SolveBruteForce(4, 9);
+        //SolveTSP(4, 50);
+        SolveE(6, 700);
+
+        sf::sleep(sf::seconds(1000));
+    }
+}
